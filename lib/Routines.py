@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 from .routines.BaseRoutine import BaseRoutine
 from .routines.ModRoutine import ModRoutine
+from .routines.StatRoutine import StatRoutine
 
 def get_routine(key):
     if key in routines:
@@ -55,6 +56,7 @@ If you just want to now how the help works...
 routines = {
     "help": HelpRoutine(),
     "mod": ModRoutine(),
+    "stat": StatRoutine(),
 }
 
 routines = OrderedDict(sorted(routines.items(), key=lambda t: t[0]))

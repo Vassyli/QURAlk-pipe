@@ -4,6 +4,7 @@ from collections import OrderedDict
 from .routines.BaseRoutine import BaseRoutine
 from .routines.ModRoutine import ModRoutine
 from .routines.StatRoutine import StatRoutine
+from .routines.HistoRoutine import HistoRoutine
 
 def get_routine(key):
     if key in routines:
@@ -15,7 +16,6 @@ def get_routine(key):
 def list_routines():
     for key in routines:
         yield key
-
 
 class RoutineNotFoundError(Exception):
     pass
@@ -57,6 +57,7 @@ routines = {
     "help": HelpRoutine(),
     "mod": ModRoutine(),
     "stat": StatRoutine(),
+    "histo": HistoRoutine(),
 }
 
 routines = OrderedDict(sorted(routines.items(), key=lambda t: t[0]))

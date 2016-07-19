@@ -1,6 +1,7 @@
 import csv
 import os
 import subprocess
+import traceback
 
 SAMTOOLS_SORT_MEMORY = "500M"
 
@@ -14,6 +15,11 @@ class Sample():
         self.settings = settings
 
     def run(self):
+        """ The essential pipeline is assembled here and called in order they are put into jobs.
+        Beware that these processes depend on each other: Everyone expects the output file of the former one as input
+
+        (I may need to do this differently, but how often does this sequence get modified?)
+        """
         jobs = [
             ["cutadapters", self.runCutAdapters, "[Error] Failed to run cutadapt for %s"],
             ["bowtieAlign", self.runBowtieAlign, "[Error] Failed ro run bowtie for %s"],
@@ -29,18 +35,23 @@ class Sample():
                 job[1]()
             except Exception as e:
                 print(e)
+                traceback.print_tb(e.__traceback__)
                 print(job[2] % (self.sampleName,))
                 return
 
         print("Completed sample %s" % (self.sampleName,))
 
-    def getFileName(self, suffix=None, extension=".fastq", ref=False):
-        if suffix is None:
+    def getFileName(self, prefix=None, extension=".fastq", ref=False):
+        """ Calculates a standardized filename based on a few arguments:
+            prefx: Indicates what has been done to the files and is put in front of the filename
+            extension: File extension; should be true to the actual file type
+            ref: Add the reference genom short name to the filename to symbolize that it has been aligned to it. """
+        if prefix is None:
             return os.path.join(*[self.settings.get("InputDirectory"), self.sampleName + extension])
         else:
             if ref == False:
                 filename = "%s_%s%s" % (
-                    suffix,
+                    prefix,
                     self.sampleName,
                     extension
                 )
@@ -49,7 +60,7 @@ class Sample():
                 # return os.path.join(*[self.settings.get("OutputDirectory"), suffix + "_" + self.sampleName + extension])
             else:
                 filename = "%s-%s_%s%s" % (
-                    suffix,
+                    prefix,
                     self.settings.get("ReferenceGenomFile"),
                     self.sampleName,
                     extension
@@ -95,18 +106,44 @@ class Sample():
         self.pack(toCut5["outAdapt"])
 
     def runBowtieAlign(self):
-        cli = "bowtie --best --chunkmbs 500 -p %d -t -S %s %s %s 2> %s"
+        useStar = False
 
-        bowtie = {
-            "threads": self.settings.get("MaxBowtieThreads"),
-            "ref": os.path.join(*[self.settings.get("ReferenceGenomPath"), self.settings.get("ReferenceGenomFile")]),
-            "in": self.getFileName("ModStop", ".fastq"),
-            "out": self.getFileName("Aligned", ".sam", True),
-            "log": self.getFileName("Aligned", ".log", True),
-        }
+        if not useStar:
+            cli = "bowtie --best --chunkmbs 500 -p %d -t -S %s %s %s 2> %s"
 
-        subprocess.check_output(cli % (bowtie["threads"], bowtie["ref"], bowtie["in"], bowtie["out"], bowtie["log"]),
-                                shell=True)
+            bowtie = {
+                "threads": self.settings.get("MaxBowtieThreads"),
+                "ref": os.path.join(*[self.settings.get("ReferenceGenomPath"), self.settings.get("ReferenceGenomFile")]),
+                "in": self.getFileName("ModStop", ".fastq"),
+                "out": self.getFileName("Aligned", ".sam", True),
+                "log": self.getFileName("Aligned", ".log", True),
+            }
+
+            cli = cli % (bowtie["threads"], bowtie["ref"], bowtie["in"], bowtie["out"], bowtie["log"])
+        else:
+            cli = "STARbin --runThreadN %d --genomeDir %s --readFilesIn %s --outFileNamePrefix %s"
+
+            bowtie = {
+                "threads": self.settings.get("MaxBowtieThreads"),
+                "ref": os.path.join(*[self.settings.get("ReferenceGenomPath"), self.settings.get("ReferenceGenomFile")]),
+                "in": self.getFileName("ModStop", ".fastq"),
+                "out": self.getFileName("Aligned", "", True),
+                "log": self.getFileName("Aligned", ".log", True),
+            }
+
+            cli = cli % (bowtie["threads"], bowtie["ref"], bowtie["in"], bowtie["out"])
+
+        subprocess.check_output(cli, shell=True)
+
+        if useStar:
+            if os.path.exists(bowtie["out"]):
+                os.remove(bowtie["out"])
+            if os.path.exists(bowtie["log"]):
+                os.remove(bowtie["log"])
+
+            subprocess.check_output("mv %sAligned.out.sam %s.sam" % (bowtie["out"], bowtie["out"]), shell=True)
+            subprocess.check_output("mv %sLog.out %s" % (bowtie["log"][0:-4], bowtie["log"]), shell=True)
+
         self.pack(bowtie["in"])
 
     def runFivePrimeFix(self):
@@ -119,7 +156,7 @@ class Sample():
         self.wrapFix(sets["in"], sets["out"], sets["mismatch"])
 
         # Delete not needed file
-        subprocess.check_output("rm -f %s" % sets["in"], shell=True)
+        #subprocess.check_output("rm -f %s" % sets["in"], shell=True)
 
     def runSamToBam(self):
         cli = "samtools view -bS %s > %s 2> %s"
@@ -133,7 +170,7 @@ class Sample():
         subprocess.check_output(cli % (sets["in"], sets["out"], sets["log"]), shell=True)
 
         # Delete not needed file
-        subprocess.check_output("rm -f %s" % sets["in"], shell=True)
+        #subprocess.check_output("rm -f %s" % sets["in"], shell=True)
 
     def runSortBam(self):
         cli = "samtools sort -m " + SAMTOOLS_SORT_MEMORY + " %s %s 2> %s"
@@ -194,35 +231,48 @@ class Sample():
         """
 
         line = fh.readline()
+        i = 0
         while (line):
+            i+=1
             line = line.split()
-            gene = line[8]
+            gene_index = line[8] + "_" + line[6]+ "_"  + line[7]
+
             if (int(line[1]) > int(line[6]) and int(line[2]) < int(line[7])):  # if mod-stop is inside gene
-                if gene not in genes:
-                    genes[gene] = geneModCount(line[8], line[0], *line[4:8])
+                if gene_index not in genes:
+                    genes[gene_index] = geneModCount(line[8], line[0], *line[4:8])
                 if line[4] == '+':
                     if intersectRefType == 'gff':
-                        genes[gene].countArray[int(line[1]) - int(line[6])] += 1
+                        """print(
+                            "Debug: ",
+                            gene_index in genes,
+                            len(genes[gene_index].countArray),
+                            int(line[1]) - int(line[6]),
+                            line[1],
+                            line[6],
+                            "Line",
+                            line
+                        )"""
+                        genes[gene_index].countArray[int(line[1]) - int(line[6])] += 1
                     elif intersectRefType == 'bed':
-                        genes[gene].countArray[int(line[1]) - int(line[6]) - 1] += 1
+                        genes[gene_index].countArray[int(line[1]) - int(line[6]) - 1] += 1
                 elif line[4] == '-':
-                    genes[gene].countArray[int(line[7]) - int(line[2]) - 1] += 1
+                    genes[gene_index].countArray[int(line[7]) - int(line[2]) - 1] += 1
 
             line = fh.readline()
         # print genes[gene]
         fh.close()
 
-        for gene in genes:
-            genes[gene].count = sum(genes[gene].countArray)
-            genes[gene].countPerNt = float(genes[gene].count) / genes[gene].length
-            genes[gene].getDescription()
+        for gene_index in genes:
+            genes[gene_index].count = sum(genes[gene_index].countArray)
+            genes[gene_index].countPerNt = float(genes[gene_index].count) / genes[gene_index].length
+            genes[gene_index].getDescription()
 
         fh = open(outputfile, 'w')
         mywriter = csv.writer(fh, delimiter=' ')
-        for gene in genes:
+        for gene_index in genes:
             # if genes[gene].countPerNt > 1:
-            mywriter.writerow([">"] + genes[gene].description)
-            mywriter.writerow(genes[gene].countArray)
+            mywriter.writerow([">"] + genes[gene_index].description)
+            mywriter.writerow(genes[gene_index].countArray)
         fh.close()
 
     def wrapFix(self, inputfile, outputfile, mismatchfile):
@@ -230,35 +280,24 @@ class Sample():
         # if inputfile.endswith(".bam"):
         #    inputfile = self.bamToSam(inputfile)
 
-        fhIn = open(inputfile, "r")
-        fhOut = open(outputfile, "w")
-        fhOut.close()
-        fhOut = open(outputfile, "a")
-        fhMis = open(mismatchfile, "w")
-        fhMis.close()
-        fhMis = open(mismatchfile, "a")
+        with open(outputfile, "w") as fhOut, open(mismatchfile, "w") as fhMis:
+            pass
 
-        i = 0
-        mis = 0
-        writerOut = csv.writer(fhOut, delimiter="\t")
-        writerMis = csv.writer(fhMis, delimiter="\t")
-        # read lines, loop through file
-        line = fhIn.readline()
-
-        while line:
-            lineOrigin = line
-            lineStr, misCount = self.fix(line)
-            if line:
-                fhOut.write(lineStr)
-            if misCount:
-                fhMis.write(lineOrigin)
-                mis += 1
-            line = fhIn.readline()
-            i += 1
-
-        fhIn.close()
-        fhOut.close()
-        fhMis.close()
+        with open(inputfile, "r") as fhIn, open(outputfile, "a") as fhOut, open(mismatchfile, "a") as fhMis:
+            i = 0
+            mis = 0
+            writerOut = csv.writer(fhOut, delimiter="\t")
+            writerMis = csv.writer(fhMis, delimiter="\t")
+            # read lines, loop through file
+            for line in fhIn:
+                lineOrigin = line
+                lineStr, misCount = self.fix(line)
+                if line:
+                    fhOut.write(lineStr)
+                if misCount:
+                    fhMis.write(lineOrigin)
+                    mis += 1
+                i += 1
 
     def fix(self, line):
         # sam file format example:

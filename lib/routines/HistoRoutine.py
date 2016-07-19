@@ -36,13 +36,13 @@ class DataList:
     def treatedCountAverage(self, gene, i):
         counts = 0
         for t in range(0, len(self.datalist), 2):
-            counts = counts + int(self.datalist[t][gene].countArray[i])
+            counts += int(self.datalist[t][gene].countArray[i])
         return int(round(counts, 0) / (len(self.datalist) / 2))
 
     def controlCountAverage(self, gene, i):
         counts = 0
         for c in range(1, len(self.datalist), 2):
-            counts = counts + int(self.datalist[c][gene].countArray[i])
+            counts += int(self.datalist[c][gene].countArray[i])
         return int(round(counts, 0) / (len(self.datalist) / 2))
 
 
@@ -110,29 +110,29 @@ exact strings (starting with ^ and ending with $) can be used as well."""
             # Make histogram for all of them!
             gene = datalist[geneName]
 
-            treatedCountAverage = []
-            controlCountAverage = []
-            differenceCountAverage = []
+            count_average_treated = []
+            count_average_control = []
+            count_average_difference = []
 
             for pos in range(gene.length):
-                treatedCountAverage.append(datalist.treatedCountAverage(geneName, pos))
-                controlCountAverage.append(datalist.controlCountAverage(geneName, pos))
-                differenceCountAverage.append(treatedCountAverage[pos] - controlCountAverage[pos])
+                count_average_treated.append(datalist.treatedCountAverage(geneName, pos))
+                count_average_control.append(datalist.controlCountAverage(geneName, pos))
+                count_average_difference.append(count_average_treated[pos] - count_average_control[pos])
 
             f, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, sharey=True)
             width = 1.0
             pos = range(gene.Start, gene.Start + gene.length)
 
-            ax1.bar(pos, treatedCountAverage, width)
+            ax1.bar(pos, count_average_treated, width)
             ax1.set_xlim(gene.Start, gene.Start + gene.length)
             ax1.set_xlabel("Position")
             ax1.set_ylabel("counts")
-            ax1.set_ylim(min(0, min(differenceCountAverage)),
-                         max(max(max(treatedCountAverage), max(controlCountAverage)), 100))
+            ax1.set_ylim(min(0, min(count_average_difference)),
+                         max(max(max(count_average_treated), max(count_average_control)), 100))
             ax1.set_title("Gene %s on chromosome %s" % (gene.name, gene.chrms))
 
-            ax2.bar(pos, controlCountAverage, width)
-            ax3.bar(pos, differenceCountAverage, width)
+            ax2.bar(pos, count_average_control, width)
+            ax3.bar(pos, count_average_difference, width)
 
             f.subplots_adjust(hspace=0)
             plt.setp([a.get_xticklabels() for a in f.axes[:-1]], visible=False)

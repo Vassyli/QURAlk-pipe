@@ -4,7 +4,7 @@ import os
 
 from lib.configuration.StatConfiguration import StatConfiguration
 from lib.configuration.ModConfiguration import ModConfiguration
-from lib.GeneModCount import GeneModCount
+from lib.GeneModCount import GeneModCount2 as GeneModCount
 from lib.StatMagician import StatMagician
 
 from .BaseRoutine import BaseRoutine
@@ -59,6 +59,7 @@ saves gene positions with significant changes between treated and control sample
     def run_statistics(self):
         magic = StatMagician(self.dataList, self.settings.get("FDR"), self.settings.get("OddsRatioThreshold"))
         statistics = magic.run()
+
         self.writeData(statistics)
 
     def readSingleDataFile(self, filename):
@@ -73,20 +74,20 @@ saves gene positions with significant changes between treated and control sample
                 if not line.startswith(">"):
                     continue
 
-                cols = line.split()
-                gene = GeneModCount(*cols[1:7])
-                gene.length = int(cols[7])
-                gene.count = int(cols[8])
-                gene.countPerNt = float(cols[9])
-                gene.countArray = next(fh).split()
+                gene = GeneModCount.restore_from_storage(*line.split()[1:11])
+                gene.countArray = [int(x) for x in next(fh).split()]
+                gene_index = gene.name + "_" + str(gene.Start) + "_" + str(gene.End)
 
-                data[gene.name] = gene
+                #data[gene.name] = gene
+                data[gene_index] = gene
 
         print("    (found %i genes)" % len(data))
 
         return data
 
     def writeData(self, output):
+        print(self.outputFile)
+
         with open(self.outputFile, "w") as fh:
             writer = csv.writer(fh, delimiter="\t", lineterminator="\n")
             fileheader = []
@@ -116,6 +117,7 @@ saves gene positions with significant changes between treated and control sample
             writer.writerow(header)
 
             for gene in output:
+                #print("For gene...", gene.name)
                 for i in range(0, max(output[gene].length - self.TAIL, 0)):
                     p_adjusted = output[gene].testArray[i][2]
                     OR = output[gene].testArray[i][3]
@@ -134,4 +136,12 @@ saves gene positions with significant changes between treated and control sample
                         row = output[gene].description[:7] + [i + 1] + [chi, p_origin, p_adjusted, OR, OR_l, OR_u] + \
                               output[gene].testArray[i][6:]
                         writer.writerow(row)
-
+                    """else:
+                        print(
+                            output[gene].name,
+                            "Pos",
+                            i + 1,
+                            p_adjusted,
+                            "NA" if p_adjusted == "NA" else p_adjusted <= self.FDR,
+                            "NA" if p_adjusted == "NA" else int(p_adjusted) > self.OddsRatioThreshold
+                        )"""

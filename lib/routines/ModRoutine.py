@@ -62,17 +62,19 @@ class ModRoutine(BaseRoutine):
         return "Aligns fastq data to a genom and counts modifications"
 
     def run(self):
+        """ Main loop to run modroutine. """
         self.load_settings()
         self.check_environment()
         self.prepare_input_files()
         self.run_samples()
 
     def load_settings(self):
+        """ Loads configuration """
         self.settings = ModConfiguration("~/QURAlkData/mod_config.ini")
 
     def check_environment(self):
         """ Controls the environment to make sure that specific programs have been
-        installed."""
+        installed. """
         print("Check runtime environment...")
 
         tocheck = [
@@ -97,6 +99,8 @@ class ModRoutine(BaseRoutine):
             exit()
 
     def prepare_input_files(self):
+        """ Prepares the input files: gzipped files are wanted. If non-compressed fasta files are found, they will be
+        compressed."""
         files = []
         samples = []
         input_directory = self.settings.get("InputDirectory")
@@ -131,18 +135,23 @@ class ModRoutine(BaseRoutine):
         self.samples = samples
 
     def run_samples(self):
-        self.queue = queue.Queue()
-
+        """ Runs the calculation pipeline on every sample found. """
+        # Abort if number of samples is 0.
         if len(self.samples) == 0:
             raise Exception("\Found no .fastq(.gz) files to work with.")
 
+        # Queue creation
+        self.queue = queue.Queue()
+
+        # Show an overview over found input files for giving a feedback to the user
         print("\nFound %i .fastq.gz files to work with:" % (len(self.samples),))
+
         for sampleFile in self.samples:
             print(" • %s" % (os.path.basename(sampleFile, )))
 
         print("")
 
-        # Now split the tasks into smaller ones to fully parallize the tasks
+        # Now split the task into smaller ones for parallelization
         try:
             # Boot threads
             for i in range(0, self.settings.get("MaxPythonThreads")):
@@ -154,12 +163,17 @@ class ModRoutine(BaseRoutine):
             for sampleFile in self.samples:
                 self.queue.put(sampleFile)
 
+            # Blocks until all tasks are done
             self.queue.join()
+
+            # Report success
             print("\nTasks are done.")
         except Exception as e:
             raise Exception("Unknown exception raised: " + str(e))
 
     def run_threads(self):
+        """ Gets called by threads. Fetches a sample, runs the calculation processes and reports
+        to the queue that it's done. """
         while True:
             samplename = self.queue.get()
             sample = Sample(samplename, self.settings)

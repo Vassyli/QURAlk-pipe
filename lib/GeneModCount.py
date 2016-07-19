@@ -1,3 +1,61 @@
+import numpy as np
+
+class GeneModCount2:
+    name = None
+    chrms = None
+    strain = None
+    featureType = None
+
+    Start = 0
+    End = 0
+    length = 1
+
+    def __init__(self, gene_name, chromosome, strain, feature_type, pos_start, pos_end):
+        self.name = gene_name
+        self.chrms = chromosome
+        self.strain = strain
+        self.featureType = feature_type
+
+        self.Start = int(pos_start)
+        self.End = int(pos_end)
+        self.length = self.End - self.Start + 1
+
+        #self.countArray = np.zeros(self.length, np.int32)
+        self.countArray = [0 for i in range(self.length)]
+        self.testArray = ["NA" for i in range(0, self.length)]
+
+        self.prepare_description()
+
+    def restore_from_storage(gene_name, chromosome, strain, feature_type, pos_start, pos_end, length, count, count_per_nt):
+        gene = GeneModCount2(gene_name, chromosome, strain, feature_type, pos_start, pos_end)
+        gene.length = int(length)
+        gene.count = int(count)
+        gene.countPerNt = float(count_per_nt)
+
+        return gene
+
+    def calculate_statistics(self):
+        self.count = sum(self.countArray)
+        self.countPerNt = self.count / self.length
+
+    def prepare_description(self):
+        self.calculate_statistics()
+        self.description = [
+            self.name,
+            self.chrms,
+            self.strain,
+            self.featureType,
+            self.Start,
+            self.End,
+            self.length,
+            self.count,
+            self.countPerNt
+        ]
+
+    def getDescription(self):
+        self.calculate_statistics()
+        self.prepare_description()
+        return self.description
 
 
 class GeneModCount():

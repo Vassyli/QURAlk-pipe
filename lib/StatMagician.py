@@ -35,8 +35,8 @@ class StatMagician:
                     array = []
 
                     for j in range(0, numOfSamples):
-                        a = int(self.dataList[j][gene].countArray[i])
-                        b = int(self.dataList[j][gene].count)
+                        a = self.dataList[j][gene].countArray[i]
+                        b = self.dataList[j][gene].count
 
                         array.append(max(a, 1))
                         array.append(max(b, 1))
@@ -62,6 +62,10 @@ class StatMagician:
                         if output[gene].testArray[i][1] <= p_sig:
                             j = pvalues.index(output[gene].testArray[i][1]) + 1  # rank
                             output[gene].testArray[i][2] = output[gene].testArray[i][1] * output[gene].length / float(j)
+                        #else:
+                        #    print("p_sig stays NA for ", output[gene].name)
+                #else:
+                #    print("p_sig is NA for ", output[gene].name)
         # Return
         return output
 

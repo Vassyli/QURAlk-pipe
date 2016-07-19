@@ -5,7 +5,7 @@ from datetime import datetime
 from .Routines import list_routines, get_routine
 
 MESSAGE_PROGRAM = "Program:\tquralk-pipe (tool chain for mod seq)"
-MESSAGE_VERSION = "Version:\t0.1.0-dev"
+MESSAGE_VERSION = "Version:\t0.2.0-dev"
 
 
 class App:
